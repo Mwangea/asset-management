@@ -1,7 +1,11 @@
+const express = require('express');
 const jwt = require('jsonwebtoken');
+const router = express.Router();
 
+// Middleware for verifying JWT token
 const auth = (req, res, next) => {
-    const token = req.header('x-auth-token');
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
     if (!token) {
         return res.status(401).json({ msg: 'No token, authorization denied' });
     }
