@@ -73,7 +73,7 @@ const AdminLayout: React.FC<LayoutProps> = ({ children }) => {
               <User className="w-8 h-8 text-[#1e3a8a]" />
             </div>
             <div>
-              <p className="font-semibold text-gray-800 text-lg">{user?.username || 'User'}</p>
+              <p className="font-semibold text-gray-800 text-lg">{user?.username || 'Administrator'}</p>
               <p className="text-sm text-gray-600 capitalize">{user?.role}</p>
             </div>
           </div>
@@ -137,7 +137,7 @@ const AdminLayout: React.FC<LayoutProps> = ({ children }) => {
         </header>
 
         {/* Main content */}
-        <main className="flex-1 p-6 lg:p-8 bg-gradient-to-b from-gray-50 to-white">
+        <main className="flex-1 p-6 lg:p-8 bg-gradient-to-b from-white to-blue-50">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>
