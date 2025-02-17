@@ -1,4 +1,4 @@
-import { BarChart3, LogIn, QrCode, Shield, Users, Clock, Globe2 } from "lucide-react";
+import { BarChart3, LogIn, QrCode, Shield, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const LandingPage = () => {
