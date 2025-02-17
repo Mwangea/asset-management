@@ -49,8 +49,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       >
         <div className="flex items-center justify-between h-20 px-6 bg-gradient-to-r from-[#1e3a8a] to-[#1e40af] shadow-md">
           <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-white/90 rounded-xl flex items-center justify-center shadow-lg transform transition-all duration-300 hover:scale-105">
-              <Box className="w-7 h-7 text-[#1e3a8a]" />
+          <div className="w-12 h-12  flex items-center justify-center  transform transition-all duration-300 hover:scale-105">
+            <img
+                  src="/KMA LOGO.png"
+                  alt="Logo"
+                  className="h-10 w-auto"
+                />
             </div>
             <span className="text-2xl font-bold text-white tracking-wide">KMA ASSETS</span>
           </div>
@@ -69,7 +73,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <User className="w-8 h-8 text-[#1e3a8a]" />
             </div>
             <div>
-              <p className="font-semibold text-gray-800 text-lg">{user?.username || 'User'}</p>
+              <p className="font-semibold text-gray-800 text-lg">{user?.username || 'Employee001'}</p>
               <p className="text-sm text-gray-600 capitalize">{user?.role}</p>
             </div>
           </div>

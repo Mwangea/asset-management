@@ -1,6 +1,6 @@
-// App.tsx
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { PrivateRoute } from "./components/PrivateRoute";
 import LoginPage from "./pages/LoginPage";
 import LandingPage from "./pages/LandingPage";
 import { Toaster } from "react-hot-toast";
@@ -12,6 +12,8 @@ import AdminAssets from "./admin/pages/AdminAssets";
 import AdminOverview from "./admin/pages/AdminOverview";
 import UserDashboard from "./client/pages";
 import AdminDashboard from "./admin/pages";
+import UnauthorizedPage from "./components/UnauthorizedPage";
+
 
 export default function App() {
   return (
@@ -22,19 +24,33 @@ export default function App() {
           {/* Public routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
           
-          {/* User dashboard routes */}
-          <Route path="/user/*" element={<UserDashboard />}>
+          {/* User dashboard routes - protected for authenticated users */}
+          <Route
+            path="/user/*"
+            element={
+              <PrivateRoute requiredRole="user">
+                <UserDashboard />
+              </PrivateRoute>
+            }
+          >
             <Route path="dashboard" element={<UserOverview />} />
             <Route path="assets" element={<UserAssets />} />
             <Route path="scan" element={<QRScanner />} />
           </Route>
 
-          {/* Admin dashboard routes */}
-          <Route path="/admin/*" element={<AdminDashboard />}>
+          {/* Admin dashboard routes - protected for admin users */}
+          <Route
+            path="/admin/*"
+            element={
+              <PrivateRoute requiredRole="admin">
+                <AdminDashboard />
+              </PrivateRoute>
+            }
+          >
             <Route path="dashboard" element={<AdminOverview />} />
             <Route path="assets" element={<AdminAssets />} />
-            
             <Route path="scan" element={<QRScanner />} />
           </Route>
 
