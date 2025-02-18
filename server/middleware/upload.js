@@ -60,7 +60,7 @@ const uploadWithErrorHandling = (fields) => {
             }
             
             // Log the request body for debugging
-            console.log('Form data received:', req.body);
+           // console.log('Form data received:', req.body);
             
             // Everything went fine
             next();
