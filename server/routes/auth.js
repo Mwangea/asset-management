@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { check, validationResult } = require('express-validator');
 
+
 // @route   POST /api/auth/login
 // @desc    Login user
 // @access  Public
@@ -46,5 +47,6 @@ router.post('/login', [
         res.status(500).send('Server error');
     }
 });
+
 
 module.exports = router;

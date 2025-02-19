@@ -3,6 +3,7 @@ const connectDB = require('./config/db');
 const dashboardRoutes = require('./routes/dashboard');
 const authRoutes = require('./routes/auth');
 const assetRoutes = require('./routes/asset');
+const adminRoutes = require('./routes/admin');
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
@@ -42,6 +43,7 @@ app.use((err, req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/assets', assetRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Handle 404 errors
 app.use((req, res) => {

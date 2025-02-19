@@ -13,6 +13,7 @@ import AdminOverview from "./admin/pages/AdminOverview";
 import UserDashboard from "./client/pages";
 import AdminDashboard from "./admin/pages";
 import UnauthorizedPage from "./components/UnauthorizedPage";
+import Users from "./admin/pages/Users";
 
 
 export default function App() {
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="dashboard" element={<UserOverview />} />
             <Route path="assets" element={<UserAssets />} />
             <Route path="scan" element={<QRScanner />} />
+
           </Route>
 
           {/* Admin dashboard routes - protected for admin users */}
@@ -52,6 +54,7 @@ export default function App() {
             <Route path="dashboard" element={<AdminOverview />} />
             <Route path="assets" element={<AdminAssets />} />
             <Route path="scan" element={<QRScanner />} />
+            <Route  path="users" element={<Users />} />
           </Route>
 
           {/* Catch all - redirect to landing */}

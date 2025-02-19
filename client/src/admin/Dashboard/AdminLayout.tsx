@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, LayoutDashboard, Box, QrCode, LogOut, User } from 'lucide-react';
+import { Menu, X, LayoutDashboard, Box, QrCode, LogOut, User,UsersIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 
@@ -27,6 +27,7 @@ const AdminLayout: React.FC<LayoutProps> = ({ children }) => {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
     { icon: Box, label: 'Assets', path: '/admin/assets' },
     { icon: QrCode, label: 'QR Scanner', path: '/admin/scan' },
+    { icon: UsersIcon, label: 'Users', path: '/admin/users' }
   ];
 
   if (!mounted) return null;
