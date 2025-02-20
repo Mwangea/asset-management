@@ -178,7 +178,7 @@ export default function AdminAssets() {
 
         {loading ? (
           <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-ocean-500 border-t-transparent"></div>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
             <p className="mt-2 text-gray-600">Loading assets...</p>
           </div>
         ) : error ? (
