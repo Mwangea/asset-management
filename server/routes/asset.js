@@ -8,17 +8,59 @@ const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 const logActivity = require('../middleware/activityLogger');
+const QRCode = require('qrcode');
+const User = require('../models/user');
+
+// Helper function to generate QR code
+async function generateQRCode(assetData) {
+    const qrData = JSON.stringify({
+        id: assetData._id,
+        name: assetData.name,
+        type: assetData.type,
+        location: assetData.location,
+        status: assetData.status,
+        assignedTo: assetData.assignedToName,
+        lastUpdated: assetData.lastUpdated
+    });
+    
+    const qrCodePath = path.join('uploads', 'qrcodes', `${assetData._id}.png`);
+    await QRCode.toFile(qrCodePath, qrData);
+    return qrCodePath;
+}
+
+// Helper function to handle errors
+function handleError(err, res) {
+    if (err.name === 'ValidationError') {
+        const errorMessages = {};
+        for (const field in err.errors) {
+            errorMessages[field] = err.errors[field].message;
+        }
+        return res.status(400).json({ 
+            msg: 'Validation failed',
+            errors: errorMessages
+        });
+    }
+    
+    if (err.code === 11000) {
+        return res.status(400).json({ 
+            msg: 'Duplicate key error',
+            field: Object.keys(err.keyPattern)[0]
+        });
+    }
+    
+    console.error('Operation error:', err);
+    res.status(500).json({ msg: 'Server error', error: err.message });
+}
+
 
 // @route   POST /api/assets
 // @desc    Add a new asset (Admin only)
 // @access  Private (Admin)
 router.post('/', auth, roleCheck('admin'), uploadWithErrorHandling([
-    { name: 'assetImage', maxCount: 1 },
-    { name: 'qrCodeImage', maxCount: 1 },
+    { name: 'assetImage', maxCount: 1 }
 ]), async (req, res) => {
     console.log('Request body:', req.body);
 
-    // Validate required fields - add more debug info
     if (!req.body.name || !req.body.type || !req.body.location) {
         return res.status(400).json({ 
             msg: 'Name, type, and location are required fields',
@@ -32,22 +74,37 @@ router.post('/', auth, roleCheck('admin'), uploadWithErrorHandling([
     }
 
     try {
-        const { name, type, assignedTo, assignedToName, dateAssigned, location, status } = req.body;
+        const { name, type, assignedTo, location, status } = req.body;
+
+        // If assignedTo is provided, fetch user details
+        let assignedToName = null;
+        if (assignedTo) {
+            const user = await User.findById(assignedTo);
+            if (!user) {
+                return res.status(400).json({ msg: 'Assigned user not found' });
+            }
+            assignedToName = user.username;
+        }
 
         const newAsset = new Asset({
             name,
             type,
             assetImage: req.files && req.files['assetImage'] ? req.files['assetImage'][0].path : null,
-            qrCodeImage: req.files && req.files['qrCodeImage'] ? req.files['qrCodeImage'][0].path : null,
             assignedTo,
             assignedToName,
-            dateAssigned,
+            dateAssigned: assignedTo ? Date.now() : null,
             location,
-            status,
+            status: assignedTo ? 'In Use' : (status || 'Available'),
         });
 
+        // Save asset first to get the ID
         const asset = await newAsset.save();
-        
+
+        // Generate QR code
+        const qrCodePath = await generateQRCode(asset);
+        asset.qrCodeImage = qrCodePath;
+        await asset.save();
+
         // Log asset creation activity
         await logActivity(
             req.user.id,
@@ -59,47 +116,27 @@ router.post('/', auth, roleCheck('admin'), uploadWithErrorHandling([
         
         res.json(asset);
     } catch (err) {
-        // Handle validation errors
-        if (err.name === 'ValidationError') {
-            const errorMessages = {};
-            
-            for (const field in err.errors) {
-                errorMessages[field] = err.errors[field].message;
-            }
-            
-            return res.status(400).json({ 
-                msg: 'Validation failed',
-                errors: errorMessages
-            });
-        }
-        
-        // Handle duplicate key error
-        if (err.code === 11000) {
-            return res.status(400).json({ 
-                msg: 'Duplicate key error',
-                field: Object.keys(err.keyPattern)[0]
-            });
-        }
-        
-        console.error('Asset creation error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
+        handleError(err, res);
     }
 });
 
-// @route   GET /api/assets/qr/:qrCodeImage
-// @desc    Get an asset by QR code
-// @access  Private (Admin and User)
-router.get('/qr/:qrCodeImage', auth, async (req, res) => {
+// @route   GET /api/assets/scan/:id
+// @desc    Scan QR code and get asset details
+// @access  Private
+router.get('/scan/:id', auth, async (req, res) => {
     try {
-        const asset = await Asset.findOne({ 
-            qrCodeImage: { $regex: new RegExp(req.params.qrCodeImage, 'i') } 
-        }).populate('assignedTo', 'username');
-        
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ msg: 'Invalid asset ID format' });
+        }
+
+        const asset = await Asset.findById(req.params.id)
+            .populate('assignedTo', 'username');
+
         if (!asset) {
             return res.status(404).json({ msg: 'Asset not found' });
         }
-        
-        // Log asset scan activity
+
+        // Log the scan activity
         await logActivity(
             req.user.id,
             req.user.username,
@@ -107,11 +144,25 @@ router.get('/qr/:qrCodeImage', auth, async (req, res) => {
             'scanned',
             `Scanned ${asset.type}: ${asset.name}`
         );
-        
-        res.json(asset);
+
+        // Return detailed asset information
+        const assetDetails = {
+            id: asset._id,
+            name: asset.name,
+            type: asset.type,
+            location: asset.location,
+            status: asset.status,
+            assignedTo: asset.assignedToName,
+            dateAssigned: asset.dateAssigned,
+            lastUpdated: asset.lastUpdated,
+            assetImage: asset.assetImage,
+            currentScanner: req.user.username,
+            scanTime: new Date()
+        };
+
+        res.json(assetDetails);
     } catch (err) {
-        console.error('Get asset by QR code error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
+        handleError(err, res);
     }
 });
 
@@ -119,8 +170,7 @@ router.get('/qr/:qrCodeImage', auth, async (req, res) => {
 // @desc    Update an asset (Admin only)
 // @access  Private (Admin)
 router.put('/:id', auth, roleCheck('admin'), uploadWithErrorHandling([
-    { name: 'assetImage', maxCount: 1 },
-    { name: 'qrCodeImage', maxCount: 1 },
+    { name: 'assetImage', maxCount: 1 }
 ]), async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -132,15 +182,14 @@ router.put('/:id', auth, roleCheck('admin'), uploadWithErrorHandling([
             return res.status(404).json({ msg: 'Asset not found' });
         }
 
-        // Save old image paths in case we need to delete them
+        // Save old image paths and status
         const oldAssetImage = asset.assetImage;
-        const oldQrCodeImage = asset.qrCodeImage;
         const oldStatus = asset.status;
 
         // Prepare details for activity log
         let updateDetails = [];
         
-        // Update fields only if they exist in the request
+        // Update fields if provided
         if (req.body.name && req.body.name !== asset.name) {
             updateDetails.push(`Name changed from "${asset.name}" to "${req.body.name}"`);
             asset.name = req.body.name;
@@ -152,16 +201,14 @@ router.put('/:id', auth, roleCheck('admin'), uploadWithErrorHandling([
         }
         
         if (req.body.assignedTo && req.body.assignedTo !== asset.assignedTo?.toString()) {
-            updateDetails.push(`Reassigned to ${req.body.assignedToName || 'new user'}`);
+            const user = await User.findById(req.body.assignedTo);
+            if (!user) {
+                return res.status(400).json({ msg: 'Assigned user not found' });
+            }
+            updateDetails.push(`Reassigned to ${user.username}`);
             asset.assignedTo = req.body.assignedTo;
-        }
-        
-        if (req.body.assignedToName && req.body.assignedToName !== asset.assignedToName) {
-            asset.assignedToName = req.body.assignedToName;
-        }
-        
-        if (req.body.dateAssigned) {
-            asset.dateAssigned = req.body.dateAssigned;
+            asset.assignedToName = user.username;
+            asset.dateAssigned = Date.now();
         }
         
         if (req.body.location && req.body.location !== asset.location) {
@@ -176,7 +223,7 @@ router.put('/:id', auth, roleCheck('admin'), uploadWithErrorHandling([
         
         asset.lastUpdated = Date.now();
 
-        // Handle file uploads
+        // Handle file upload
         if (req.files && req.files['assetImage']) {
             updateDetails.push('Asset image updated');
             asset.assetImage = req.files['assetImage'][0].path;
@@ -185,15 +232,10 @@ router.put('/:id', auth, roleCheck('admin'), uploadWithErrorHandling([
                 fs.unlinkSync(oldAssetImage);
             }
         }
-        
-        if (req.files && req.files['qrCodeImage']) {
-            updateDetails.push('QR code image updated');
-            asset.qrCodeImage = req.files['qrCodeImage'][0].path;
-            // Delete old QR code image if it exists
-            if (oldQrCodeImage && fs.existsSync(oldQrCodeImage)) {
-                fs.unlinkSync(oldQrCodeImage);
-            }
-        }
+
+        // Update QR code with new information
+        const qrCodePath = await generateQRCode(asset);
+        asset.qrCodeImage = qrCodePath;
 
         // Save the updated asset
         await asset.save();
@@ -209,274 +251,16 @@ router.put('/:id', auth, roleCheck('admin'), uploadWithErrorHandling([
             );
         }
         
-        // Additionally log status change specifically if it happened
-        if (req.body.status && req.body.status !== oldStatus) {
-            let actionType;
-            switch(req.body.status) {
-                case 'In Use':
-                    actionType = 'assigned';
-                    break;
-                case 'Under Maintenance':
-                    actionType = 'maintenance';
-                    break;
-                case 'Available':
-                    actionType = 'available';
-                    break;
-                default:
-                    actionType = 'updated';
-            }
-            
-            await logActivity(
-                req.user.id,
-                req.user.username,
-                asset._id,
-                actionType,
-                `Status changed to ${req.body.status} for ${asset.type}: ${asset.name}`
-            );
-        }
-        
         res.json(asset);
     } catch (err) {
-        // Handle validation errors
-        if (err.name === 'ValidationError') {
-            const errorMessages = {};
-            
-            for (const field in err.errors) {
-                errorMessages[field] = err.errors[field].message;
-            }
-            
-            return res.status(400).json({ 
-                msg: 'Validation failed',
-                errors: errorMessages
-            });
-        }
-        
-        console.error('Update asset error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
+        handleError(err, res);
     }
 });
 
-// @route   POST /api/assets/:id/assign
-// @desc    Assign asset to a user (Admin only)
-// @access  Private (Admin)
-router.post('/:id/assign', auth, roleCheck('admin'), async (req, res) => {
-    try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({ msg: 'Invalid asset ID format' });
-        }
-        
-        const { assignedTo, assignedToName } = req.body;
-        
-        if (!assignedTo || !assignedToName) {
-            return res.status(400).json({ msg: 'Assigned user ID and name are required' });
-        }
-        
-        const asset = await Asset.findById(req.params.id);
-        if (!asset) {
-            return res.status(404).json({ msg: 'Asset not found' });
-        }
-        
-        // Check if already assigned to the same user
-        if (asset.assignedTo && asset.assignedTo.toString() === assignedTo && 
-            asset.status === 'In Use') {
-            return res.status(400).json({ 
-                msg: 'Asset is already assigned to this user'
-            });
-        }
-        
-        // Update assignment details
-        asset.assignedTo = assignedTo;
-        asset.assignedToName = assignedToName;
-        asset.status = 'In Use';
-        asset.dateAssigned = Date.now();
-        asset.lastUpdated = Date.now();
-        
-        await asset.save();
-        
-        // Log assignment activity
-        await logActivity(
-            req.user.id,
-            req.user.username,
-            asset._id,
-            'assigned',
-            `Assigned ${asset.type}: ${asset.name} to ${assignedToName}`
-        );
-        
-        res.json({
-            msg: 'Asset assigned successfully',
-            asset
-        });
-    } catch (err) {
-        console.error('Assign asset error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
-    }
-});
-
-// @route   POST /api/assets/:id/unassign
-// @desc    Unassign asset from a user (Admin only)
-// @access  Private (Admin)
-router.post('/:id/unassign', auth, roleCheck('admin'), async (req, res) => {
-    try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({ msg: 'Invalid asset ID format' });
-        }
-        
-        const asset = await Asset.findById(req.params.id);
-        if (!asset) {
-            return res.status(404).json({ msg: 'Asset not found' });
-        }
-        
-        // Check if already unassigned
-        if (!asset.assignedTo && asset.status === 'Available') {
-            return res.status(400).json({ 
-                msg: 'Asset is already unassigned'
-            });
-        }
-        
-        // Store the previous assignee for the activity log
-        const previousAssignee = asset.assignedToName;
-        
-        // Update assignment details
-        asset.assignedTo = null;
-        asset.assignedToName = null;
-        asset.status = 'Available';
-        asset.lastUpdated = Date.now();
-        
-        await asset.save();
-        
-        // Log unassignment activity
-        await logActivity(
-            req.user.id,
-            req.user.username,
-            asset._id,
-            'unassigned',
-            `Unassigned ${asset.type}: ${asset.name} from ${previousAssignee || 'user'}`
-        );
-        
-        res.json({
-            msg: 'Asset unassigned successfully',
-            asset
-        });
-    } catch (err) {
-        console.error('Unassign asset error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
-    }
-});
-
-// @route   POST /api/assets/:id/maintenance
-// @desc    Set asset status to Under Maintenance (Admin only)
-// @access  Private (Admin)
-router.post('/:id/maintenance', auth, roleCheck('admin'), async (req, res) => {
-    try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({ msg: 'Invalid asset ID format' });
-        }
-        
-        const asset = await Asset.findById(req.params.id);
-        if (!asset) {
-            return res.status(404).json({ msg: 'Asset not found' });
-        }
-        
-        // Check if already under maintenance
-        if (asset.status === 'Under Maintenance') {
-            return res.status(400).json({ 
-                msg: 'Asset is already under maintenance'
-            });
-        }
-        
-        // Store previous status for log
-        const previousStatus = asset.status;
-        const previousAssignee = asset.assignedToName;
-        
-        // Update status
-        asset.status = 'Under Maintenance';
-        if (previousStatus === 'In Use') {
-            // Keep track of who had it before maintenance
-            // but don't actually assign it to them
-            asset.assignedTo = null;
-            // Keep the name for reference
-        }
-        asset.lastUpdated = Date.now();
-        
-        await asset.save();
-        
-        // Log maintenance activity
-        await logActivity(
-            req.user.id,
-            req.user.username,
-            asset._id,
-            'maintenance',
-            `Set ${asset.type}: ${asset.name} to maintenance status` + 
-            (previousStatus === 'In Use' ? ` (previously assigned to ${previousAssignee})` : '')
-        );
-        
-        res.json({
-            msg: 'Asset set to maintenance successfully',
-            asset
-        });
-    } catch (err) {
-        console.error('Maintenance asset error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
-    }
-});
-
-// @route   POST /api/assets/:id/available
-// @desc    Set asset status to Available (Admin only)
-// @access  Private (Admin)
-router.post('/:id/available', auth, roleCheck('admin'), async (req, res) => {
-    try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({ msg: 'Invalid asset ID format' });
-        }
-        
-        const asset = await Asset.findById(req.params.id);
-        if (!asset) {
-            return res.status(404).json({ msg: 'Asset not found' });
-        }
-        
-        // Check if already available
-        if (asset.status === 'Available' && !asset.assignedTo) {
-            return res.status(400).json({ 
-                msg: 'Asset is already available'
-            });
-        }
-        
-        // Store previous status for log
-        const previousStatus = asset.status;
-        const previousAssignee = asset.assignedToName;
-        
-        // Update status
-        asset.status = 'Available';
-        asset.assignedTo = null;
-        asset.assignedToName = null;
-        asset.lastUpdated = Date.now();
-        
-        await asset.save();
-        
-        // Log available activity
-        await logActivity(
-            req.user.id,
-            req.user.username,
-            asset._id,
-            'available',
-            `Set ${asset.type}: ${asset.name} to available status` + 
-            (previousStatus === 'In Use' ? ` (previously assigned to ${previousAssignee})` : 
-             previousStatus === 'Under Maintenance' ? ' (completed maintenance)' : '')
-        );
-        
-        res.json({
-            msg: 'Asset set to available successfully',
-            asset
-        });
-    } catch (err) {
-        console.error('Available asset error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
-    }
-});
 
 // @route   GET /api/assets
-// @desc    Get all assets
-// @access  Private (Admin and User)
+// @desc    Get assets (filtered by user role)
+// @access  Private
 router.get('/', auth, async (req, res) => {
     try {
         const query = {};
@@ -485,13 +269,21 @@ router.get('/', auth, async (req, res) => {
         if (req.query.type) query.type = req.query.type;
         if (req.query.status) query.status = req.query.status;
         if (req.query.location) query.location = req.query.location;
-        if (req.query.assignedTo) query.assignedTo = req.query.assignedTo;
         
-        const assets = await Asset.find(query).populate('assignedTo', 'username');
+        // If user is not admin, only show their assigned assets
+        if (req.user.role !== 'admin') {
+            query.assignedTo = req.user.id;
+        } else if (req.query.assignedTo) {
+            query.assignedTo = req.query.assignedTo;
+        }
+        
+        const assets = await Asset.find(query)
+            .populate('assignedTo', 'username')
+            .sort({ lastUpdated: -1 });
+            
         res.json(assets);
     } catch (err) {
-        console.error('Get all assets error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
+        handleError(err, res);
     }
 });
 
@@ -530,12 +322,12 @@ router.delete('/:id', auth, roleCheck('admin'), async (req, res) => {
             return res.status(404).json({ msg: 'Asset not found' });
         }
 
-        // Store asset details for activity log before deletion
+        // Store asset details for activity log
         const assetType = asset.type;
         const assetName = asset.name;
         const assetId = asset._id;
 
-        // Delete associated image files
+        // Delete associated files
         if (asset.assetImage && fs.existsSync(asset.assetImage)) {
             fs.unlinkSync(asset.assetImage);
         }
@@ -557,8 +349,7 @@ router.delete('/:id', auth, roleCheck('admin'), async (req, res) => {
         
         res.json({ msg: 'Asset removed successfully' });
     } catch (err) {
-        console.error('Delete asset error:', err);
-        res.status(500).json({ msg: 'Server error', error: err.message });
+        handleError(err, res);
     }
 });
 

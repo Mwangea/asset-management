@@ -16,7 +16,7 @@ const AssetSchema = new mongoose.Schema({
     },
     qrCodeImage: {
         type: String,
-        required: true,  // Now explicitly required
+          // Now explicitly required
         unique: true,
     },
     assignedTo: {
