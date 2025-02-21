@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { Search, Download, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -118,7 +119,7 @@ const UserQRCodes: React.FC = () => {
         try {
           const errorData = JSON.parse(errorText);
           throw new Error(errorData.message || errorData.msg || 'Failed to load QR code for printing');
-        } catch (parseError) {
+        } catch (error) {
           throw new Error('Failed to load QR code: Invalid server response');
         }
       }
