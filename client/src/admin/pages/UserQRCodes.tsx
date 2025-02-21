@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { Search, Download, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../../api/axios';
@@ -378,6 +379,7 @@ const UserQRCodes: React.FC = () => {
               </div>
               <div className="flex space-x-2">
                 <button
+                title='left'
                   onClick={(e) => {
                     e.preventDefault();
                     setCurrentPage(prev => Math.max(1, prev - 1));
@@ -388,6 +390,7 @@ const UserQRCodes: React.FC = () => {
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <button
+                title='current'
                   onClick={(e) => {
                     e.preventDefault();
                     setCurrentPage(prev => Math.min(totalPages, prev + 1));
