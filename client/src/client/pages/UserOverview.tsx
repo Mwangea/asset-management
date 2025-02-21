@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from 'react';
 import { Package, Users, Activity, AlertCircle, QrCode, PenTool, ChartCandlestick, BarChart3, MapPin } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';

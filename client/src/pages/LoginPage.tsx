@@ -26,8 +26,8 @@ const LoginPage = () => {
       const response = await authApi.login(username, password);
       const { token, role } = response;
       
-      // Store auth data and update context
-      login(token, role);
+      // Store auth data and update context - now including username
+      login(token, role, username);
       
       toast.success('Welcome back!');
       

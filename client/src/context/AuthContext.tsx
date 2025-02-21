@@ -3,7 +3,7 @@ import { User } from '../types/auth';
 
 interface AuthContextType {
   user: User | null;
-  login: (token: string, role: string) => void;
+  login: (token: string, role: string, username: string) => void;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -16,21 +16,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
-    if (token && role) {
-      // You might want to validate the token here
-      setUser({ id: '', username: '', role: role as 'admin' | 'user' });
+    const username = localStorage.getItem('username');
+    
+    if (token && role && username) {
+      setUser({ 
+        id: '', // You might want to store and retrieve the ID as well
+        username: username,
+        role: role as 'admin' | 'user'
+      });
     }
   }, []);
 
-  const login = (token: string, role: string) => {
+  const login = (token: string, role: string, username: string) => {
     localStorage.setItem('token', token);
     localStorage.setItem('role', role);
-    setUser({ id: '', username: '', role: role as 'admin' | 'user' });
+    localStorage.setItem('username', username);
+    
+    setUser({ 
+      id: '', // You might want to set the ID here as well
+      username: username,
+      role: role as 'admin' | 'user'
+    });
   };
 
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
+    localStorage.removeItem('username');
     setUser(null);
   };
 

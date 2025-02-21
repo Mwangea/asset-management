@@ -29,7 +29,7 @@ const ActivityLogSchema = new Schema({
   }
 });
 
-// Create index for faster queries by timestamp
+// Create index for faster queries
 ActivityLogSchema.index({ timestamp: -1 });
 ActivityLogSchema.index({ user: 1 });
 ActivityLogSchema.index({ asset: 1 });

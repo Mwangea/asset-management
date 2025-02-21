@@ -5,7 +5,9 @@ const bcrypt = require('bcryptjs');
 const { check, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/role');
-
+const Asset = require('../models/asset');
+const path = require('path');
+const fs = require('fs');
 
 // @route   POST /api/admin/create-user
 // @desc    Admin creates a new user
@@ -150,5 +152,104 @@ router.delete('/users/:id', [auth, roleCheck('admin')], async (req, res) => {
         res.status(500).send('Server error');
     }
 });
+
+// @route   GET /api/admin/users-with-assets
+// @desc    Get all users with their assigned assets and QR codes
+// @access  Private (Admin only)
+router.get('/users-with-assets', [auth, roleCheck('admin')], async (req, res) => {
+    try {
+        // Find all users
+        const users = await User.find()
+            .select('username role')
+            .lean(); // Use lean() for better performance since we're just reading
+
+        // For each user, find their assigned assets
+        const usersWithAssets = await Promise.all(users.map(async (user) => {
+            const assignedAssets = await Asset.find({ 
+                assignedTo: user._id 
+            })
+            .select('name qrCodeImage status location')
+            .lean();
+
+            return {
+                ...user,
+                assignedAssets: assignedAssets || []
+            };
+        }));
+
+        // Filter out users with no assigned assets if needed
+         const usersWithAssignedAssets = usersWithAssets.filter(user => user.assignedAssets.length > 0);
+
+        res.json(usersWithAssets);
+    } catch (err) {
+        console.error('Error in /users-with-assets:', err.message);
+        res.status(500).send('Server error');
+    }
+});
+
+// @route   GET /api/admin/users/:userId/assets
+// @desc    Get all assets assigned to a specific user
+// @access  Private (Admin only)
+router.get('/users/:userId/assets', [auth, roleCheck('admin')], async (req, res) => {
+    try {
+        const userId = req.params.userId;
+
+        // Check if user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+
+        // Find all assets assigned to this user
+        const assets = await Asset.find({ 
+            assignedTo: userId 
+        })
+        .select('name qrCodeImage status location dateAssigned')
+        .sort({ dateAssigned: -1 });
+
+        res.json(assets);
+    } catch (err) {
+        console.error('Error in /users/:userId/assets:', err.message);
+        if (err.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+        res.status(500).send('Server error');
+    }
+});
+
+// @route   GET /api/admin/assets/:assetId/qr-code
+// @desc    Get QR code for a specific asset
+// @access  Private (Admin only)
+router.get('/assets/:assetId/qr-code', [auth, roleCheck('admin')], async (req, res) => {
+    try {
+        const asset = await Asset.findById(req.params.assetId).select('name qrCodeImage');
+
+        if (!asset) {
+            return res.status(404).json({ msg: 'Asset not found' });
+        }
+
+        if (!asset.qrCodeImage) {
+            return res.status(404).json({ msg: 'QR code not found for this asset' });
+        }
+
+        const qrCodePath = path.join(__dirname, '..', asset.qrCodeImage);
+
+        // Check if the file exists before sending
+        if (!fs.existsSync(qrCodePath)) {
+            return res.status(404).json({ msg: 'QR code image not found on the server' });
+        }
+
+        // Set correct content type and send the file
+        res.sendFile(qrCodePath);
+    } catch (err) {
+        console.error('Error in /assets/:assetId/qr-code:', err.message);
+        if (err.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'Asset not found' });
+        }
+        res.status(500).send('Server error');
+    }
+});
+
+
 
 module.exports = router;

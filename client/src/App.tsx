@@ -14,6 +14,7 @@ import UserDashboard from "./client/pages";
 import AdminDashboard from "./admin/pages";
 import UnauthorizedPage from "./components/UnauthorizedPage";
 import Users from "./admin/pages/Users";
+import UserQRCodes from "./admin/pages/UserQRCodes";
 
 
 export default function App() {
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="assets" element={<AdminAssets />} />
             <Route path="scan" element={<QRScanner />} />
             <Route  path="users" element={<Users />} />
+            <Route path="download" element={<UserQRCodes />} />
           </Route>
 
           {/* Catch all - redirect to landing */}
