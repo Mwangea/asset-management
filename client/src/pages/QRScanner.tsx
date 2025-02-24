@@ -263,9 +263,11 @@ const QRScanner = () => {
                 )}
                 
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Last Updated</p>
-                  <p className="text-lg">{new Date(asset.lastUpdated).toLocaleDateString()}</p>
-                </div>
+  <p className="text-sm font-medium text-gray-500">Last Updated</p>
+  <p className="text-lg">
+    {asset.lastUpdated ? new Date(asset.lastUpdated).toLocaleDateString() : 'N/A'}
+  </p>
+</div>
                 
                 {asset.assetImage && (
                   <div>

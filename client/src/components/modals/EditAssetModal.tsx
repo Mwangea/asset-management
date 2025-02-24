@@ -15,10 +15,11 @@ interface AssetFormData {
   type: string;
   location: string;
   status: string;
-  assignedTo: string;
-  assignedToName: string;
-  dateAssigned: string;
-  assetImage: File | null;
+  assignedTo?: string;
+  assignedToName?: string;
+  dateAssigned?: string;
+  assetImage?: File | null;
+  qrCodeImage?: null;
 }
 
 interface EditAssetModalProps {
@@ -39,29 +40,27 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSucc
     assignedTo: '',
     assignedToName: '',
     dateAssigned: '',
-    assetImage: null
+    assetImage: null,
+    qrCodeImage: null,
   });
 
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [assetImagePreview, setAssetImagePreview] = useState<string | null>(null);
-  // First, ensure we have the assigned user separate from the available users
-  const [currentAssignedUser, setCurrentAssignedUser] = useState<User | null>(null);
-
 
   // Helper function to construct image URLs
   const getImageUrl = (imagePath?: string) => {
     if (!imagePath) return null;
-    
+
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return imagePath;
     }
-    
-    const baseUrl = api.defaults.baseURL?.endsWith('/api') 
-      ? api.defaults.baseURL.slice(0, -4) 
+
+    const baseUrl = api.defaults.baseURL?.endsWith('/api')
+      ? api.defaults.baseURL.slice(0, -4)
       : api.defaults.baseURL?.replace('/api', '') || '';
-    
+
     return `${baseUrl}${imagePath.startsWith('/') ? imagePath : `/${imagePath}`}`;
   };
 
@@ -88,26 +87,18 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSucc
   // Initialize form data when asset changes
   useEffect(() => {
     if (asset) {
-      // Extract assigned user info
-      const assignedUserInfo = typeof asset.assignedTo === 'object' 
-        ? { _id: asset.assignedTo._id, username: asset.assignedTo.username }
-        : asset.assignedTo 
-          ? { _id: asset.assignedTo, username: asset.assignedToName }
-          : null;
-  
-      setCurrentAssignedUser(assignedUserInfo);
-  
       setFormData({
         name: asset.name,
         type: asset.type,
         location: asset.location,
         status: asset.status,
-        assignedTo: assignedUserInfo?._id || '',
-        assignedToName: assignedUserInfo?.username || '',
+        assignedTo: asset.assignedTo || '',
+        assignedToName: asset.assignedToName || '',
         dateAssigned: asset.dateAssigned ? new Date(asset.dateAssigned).toISOString().split('T')[0] : '',
-        assetImage: null
+        assetImage: null,
+        qrCodeImage: null,
       });
-  
+
       if (asset.assetImage) {
         setAssetImagePreview(getImageUrl(asset.assetImage));
       } else {
@@ -118,14 +109,15 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSucc
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
+
     if (name === 'assignedTo') {
       const selectedUser = users.find(user => user._id === value);
       setFormData(prev => ({
         ...prev,
         assignedTo: value,
         assignedToName: selectedUser ? selectedUser.username : '',
-        status: value ? 'In Use' : prev.status
+        // Only set status to "In Use" if a user is being assigned
+        status: value ? 'In Use' : prev.status,
       }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
@@ -137,7 +129,7 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSucc
     if (files && files.length > 0) {
       const file = files[0];
       setFormData(prev => ({ ...prev, assetImage: file }));
-      
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setAssetImagePreview(reader.result as string);
@@ -149,37 +141,37 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSucc
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!asset) return;
-    
+
     setLoading(true);
 
     try {
       const formDataToSend = new FormData();
-      
+
       // Append text fields
       formDataToSend.append('name', formData.name);
       formDataToSend.append('type', formData.type);
       formDataToSend.append('location', formData.location);
       formDataToSend.append('status', formData.status);
-      
+
+      // Only append assignedTo if it has a value
       if (formData.assignedTo) {
         formDataToSend.append('assignedTo', formData.assignedTo);
       }
-      
-      // Append file only if new file was selected
+
+      // Append file only if a new file was selected
       if (formData.assetImage instanceof File) {
         formDataToSend.append('assetImage', formData.assetImage);
       }
 
       await api.put(`/assets/${asset._id}`, formDataToSend, {
         headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
       toast.success('Asset updated successfully');
       onSuccess();
       onClose();
-      
     } catch (error: any) {
       console.error('Error updating asset:', error);
       toast.error(error.response?.data?.msg || 'Failed to update asset');
@@ -260,28 +252,29 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSucc
                 Assigned To
               </label>
               <select
-  id="assignedTo"
-  name="assignedTo"
-  value={formData.assignedTo}
-  onChange={handleChange}
-  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-  disabled={loading || loadingUsers}
->
-  <option value={currentAssignedUser?._id || ""}>
-    {currentAssignedUser?.username || "Not Assigned"}
-  </option>
-  {loadingUsers ? (
-    <option disabled>Loading users...</option>
-  ) : (
-    users
-      .filter(user => user._id !== currentAssignedUser?._id)
-      .map(user => (
-        <option key={user._id} value={user._id}>
-          {user.username}
-        </option>
-      ))
-  )}
-</select>
+                id="assignedTo"
+                name="assignedTo"
+                value={formData.assignedTo}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={loading || loadingUsers}
+              >
+                <option value="">Not Assigned</option>
+                {loadingUsers ? (
+                  <option disabled>Loading users...</option>
+                ) : (
+                  users.map(user => (
+                    <option key={user._id} value={user._id}>
+                      {user.username}
+                    </option>
+                  ))
+                )}
+              </select>
+              {formData.assignedToName && (
+                <p className="mt-1 text-sm text-gray-500">
+                  Currently assigned to: {formData.assignedToName}
+                </p>
+              )}
             </div>
 
             <div>
@@ -295,7 +288,7 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSucc
                 onChange={handleChange}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={loading || formData.assignedTo !== ''}
+                disabled={loading}
               >
                 {VALID_STATUSES.map(status => (
                   <option key={status} value={status}>
@@ -303,11 +296,6 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSucc
                   </option>
                 ))}
               </select>
-              {formData.assignedTo && (
-                <p className="mt-1 text-sm text-gray-500">
-                  Status is automatically set to "In Use" when asset is assigned
-                </p>
-              )}
             </div>
 
             <div>
