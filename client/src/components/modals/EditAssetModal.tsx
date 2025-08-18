@@ -29,7 +29,7 @@ interface EditAssetModalProps {
   asset: Asset | null;
 }
 
-const VALID_STATUSES = ['Available', 'In Use', 'Under Maintenance'];
+const VALID_STATUSES = ['Available', 'In Use', 'Under Maintenance', 'Reservable'];
 
 const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onSuccess, asset }) => {
   const [formData, setFormData] = useState<AssetFormData>({

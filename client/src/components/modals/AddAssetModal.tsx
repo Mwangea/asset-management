@@ -260,6 +260,7 @@ const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose, onSucces
                 disabled={loading || formData.assignedTo !== ''}
               >
                 <option value="Available">Available</option>
+                <option value="Reservable">Reservable</option>
                 <option value="In Use">In Use</option>
                 <option value="Under Maintenance">Under Maintenance</option>
               </select>

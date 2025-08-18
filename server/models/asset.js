@@ -38,7 +38,7 @@ const AssetSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: {
-            values: ['In Use', 'Under Maintenance', 'Available'],
+            values: ['In Use', 'Under Maintenance', 'Available', 'Reservable'],
             message: '{VALUE} is not a valid status. Valid statuses are: In Use, Under Maintenance, Available'
         },
         default: 'Available',

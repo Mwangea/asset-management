@@ -13,6 +13,8 @@ const StatusBadge = ({ status }: { status: string }) => {
     switch (status.toLowerCase()) {
       case 'in use':
         return 'bg-blue-100 text-blue-800';
+      case 'reservable':
+        return 'bg-purple-100 text-purple-100'
       case 'under maintenance':
         return 'bg-yellow-100 text-yellow-800';
       case 'available':

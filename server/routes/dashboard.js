@@ -18,6 +18,7 @@ router.get('/stats', auth, async (req, res) => {
     const assetsInUse = await Asset.countDocuments({ status: 'In Use' });
     const availableAssets = await Asset.countDocuments({ status: 'Available' });
     const assetsUnderMaintenance = await Asset.countDocuments({ status: 'Under Maintenance' });
+    const reservableAssets = await Asset.countDocuments({ status: 'Reservable'});
     
     // Get distribution by type
     const assetTypes = await Asset.aggregate([
@@ -41,6 +42,7 @@ router.get('/stats', auth, async (req, res) => {
       assetsInUse,
       availableAssets,
       assetsUnderMaintenance,
+      reservableAssets,
       assetDistribution,
       locationDistribution
     });
@@ -79,6 +81,7 @@ router.get('/admin', auth, roleCheck('admin'), async (req, res) => {
     const assetsInUse = await Asset.countDocuments({ status: 'In Use' });
     const availableAssets = await Asset.countDocuments({ status: 'Available' });
     const assetsUnderMaintenance = await Asset.countDocuments({ status: 'Under Maintenance' });
+    const reservableAssets = await Asset.countDocuments({ status: 'Reservable'});
     
     // Get distribution by type
     const assetTypes = await Asset.aggregate([
@@ -113,6 +116,7 @@ router.get('/admin', auth, roleCheck('admin'), async (req, res) => {
         assetsInUse,
         availableAssets,
         assetsUnderMaintenance,
+        reservableAssets,
       },
       distributions: {
         byType: assetTypes.map(item => ({ type: item._id, count: item.count })),
