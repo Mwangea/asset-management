@@ -24,8 +24,8 @@ export default function App() {
         <Toaster position="top-right" />
         <Routes>
           {/* Public routes */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<LoginPage />} />
+          {/* <Route path="/login" element={<LoginPage />} /> */}
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
           
           {/* User dashboard routes - protected for authenticated users */}
