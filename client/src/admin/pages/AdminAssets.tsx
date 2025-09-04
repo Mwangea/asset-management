@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Eye, ChevronLeft, ChevronRight, Plus, Edit, Trash2 } from 'lucide-react';
+import { Search, Filter, Eye, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Download, FileText, FileSpreadsheet, File } from 'lucide-react';
 import clsx from 'clsx';
 import { Asset } from '../../types/asset';
 import api from '../../api/axios';
@@ -7,14 +7,13 @@ import AddAssetModal from '../../components/modals/AddAssetModal';
 import EditAssetModal from '../../components/modals/EditAssetModal';
 import DeleteAssetModal from '../../components/modals/DeleteAssetModal';
 
-
 const StatusBadge = ({ status }: { status: string }) => {
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'in use':
         return 'bg-blue-100 text-blue-800';
       case 'reservable':
-        return 'bg-purple-100 text-purple-100'
+        return 'bg-purple-100 text-purple-800';
       case 'under maintenance':
         return 'bg-yellow-100 text-yellow-800';
       case 'available':
@@ -34,6 +33,186 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
+// Export functionality component
+const ExportDropdown = ({ assets, isOpen, onToggle }: { assets: Asset[], isOpen: boolean, onToggle: () => void }) => {
+  const exportToCSV = () => {
+    const headers = ['Name', 'Type', 'Location', 'Status', 'Assigned To', 'Date Assigned'];
+    
+    const csvData = assets.map(asset => [
+      asset.name,
+      asset.type,
+      asset.location,
+      asset.status,
+      asset.assignedToName || 'Not Assigned',
+      asset.dateAssigned ? new Date(asset.dateAssigned).toLocaleDateString() : 'Not Assigned'
+    ]);
+
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(field => `"${field}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `assets_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    onToggle();
+  };
+
+  const exportToExcel = async () => {
+    try {
+      // Dynamically import xlsx
+      const XLSX = await import('xlsx');
+      
+      const worksheetData = assets.map(asset => ({
+        'Asset Name': asset.name,
+        'Type': asset.type,
+        'Location': asset.location,
+        'Status': asset.status,
+        'Assigned To': asset.assignedToName || 'Not Assigned',
+        'Date Assigned': asset.dateAssigned ? new Date(asset.dateAssigned).toLocaleDateString() : 'Not Assigned'
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Assets');
+
+      // Auto-size columns
+      const columnWidths = [
+        { wch: 20 }, // Asset Name
+        { wch: 15 }, // Type
+        { wch: 20 }, // Location
+        { wch: 15 }, // Status
+        { wch: 15 }, // Assigned To
+        { wch: 15 }  // Date Assigned
+      ];
+      worksheet['!cols'] = columnWidths;
+
+      XLSX.writeFile(workbook, `assets_${new Date().toISOString().split('T')[0]}.xlsx`);
+      onToggle();
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      alert('Error exporting to Excel. Please try again.');
+    }
+  };
+
+  const exportToPDF = async () => {
+    try {
+      // Dynamically import jsPDF and autoTable
+      const jsPDF = (await import('jspdf')).default;
+      const autoTable = (await import('jspdf-autotable')).default;
+
+      const doc = new jsPDF();
+      
+      // Add title
+      doc.setFontSize(18);
+      doc.text('Asset Report', 14, 22);
+      
+      // Add generation date
+      doc.setFontSize(11);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 32);
+      
+      // Prepare table data
+      const tableData = assets.map(asset => [
+        asset.name,
+        asset.type,
+        asset.location,
+        asset.status,
+        asset.assignedToName || 'Not Assigned',
+        asset.dateAssigned ? new Date(asset.dateAssigned).toLocaleDateString() : 'Not Assigned'
+      ]);
+
+      // Add table using autoTable
+      autoTable(doc, {
+        head: [['Asset Name', 'Type', 'Location', 'Status', 'Assigned To', 'Date Assigned']],
+        body: tableData,
+        startY: 40,
+        styles: {
+          fontSize: 8,
+          cellPadding: 3,
+        },
+        headStyles: {
+          fillColor: [59, 130, 246], // Blue color
+          textColor: 255,
+          fontStyle: 'bold'
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252] // Light gray
+        },
+        columnStyles: {
+          0: { cellWidth: 35 }, // Asset Name
+          1: { cellWidth: 25 }, // Type
+          2: { cellWidth: 30 }, // Location
+          3: { cellWidth: 25 }, // Status
+          4: { cellWidth: 25 }, // Assigned To
+          5: { cellWidth: 25 }  // Date Assigned
+        }
+      });
+
+      // Get the final Y position from the table
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      
+      // Add summary
+      doc.setFontSize(12);
+      doc.text(`Total Assets: ${assets.length}`, 14, finalY);
+      
+      // Count by status
+      const statusCounts = assets.reduce((acc, asset) => {
+        acc[asset.status] = (acc[asset.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      let summaryY = finalY + 10;
+      doc.text('Status Summary:', 14, summaryY);
+      Object.entries(statusCounts).forEach(([status, count]) => {
+        summaryY += 8;
+        doc.setFontSize(10);
+        doc.text(`${status}: ${count}`, 20, summaryY);
+      });
+
+      doc.save(`assets_${new Date().toISOString().split('T')[0]}.pdf`);
+      onToggle();
+    } catch (error) {
+      console.error('Error exporting to PDF:', error);
+      alert('Error exporting to PDF. Please try again.');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
+      <div className="py-1">
+        <button
+          onClick={exportToCSV}
+          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+        >
+          <FileText className="w-4 h-4 mr-3" />
+          Export as CSV
+        </button>
+        <button
+          onClick={exportToExcel}
+          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+        >
+          <FileSpreadsheet className="w-4 h-4 mr-3" />
+          Export as Excel
+        </button>
+        <button
+          onClick={exportToPDF}
+          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+        >
+          <File className="w-4 h-4 mr-3" />
+          Export as PDF
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function AdminAssets() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,6 +221,7 @@ export default function AdminAssets() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -148,14 +328,30 @@ export default function AdminAssets() {
   return (
     <div className="bg-gradient-to-b from-white to-blue-50">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Assets -</h1>
-        <button 
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-blue-400 text-white px-4 py-2 rounded-lg flex items-center hover:bg-ocean-700"
-        >
-          <Plus className="w-5 h-5 mr-2" />
-          Add Asset
-        </button>
+        <h1 className="text-2xl font-bold text-gray-900">Assets</h1>
+        <div className="flex gap-3">
+          <div className="relative">
+            <button 
+              onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-green-700"
+            >
+              <Download className="w-5 h-5 mr-2" />
+              Export
+            </button>
+            <ExportDropdown
+              assets={filteredAssets}
+              isOpen={isExportDropdownOpen}
+              onToggle={() => setIsExportDropdownOpen(false)}
+            />
+          </div>
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Add Asset
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-md">
@@ -166,7 +362,7 @@ export default function AdminAssets() {
               <input
                 type="text"
                 placeholder="Search assets..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ocean-500 focus:border-ocean-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -311,7 +507,7 @@ export default function AdminAssets() {
                         className={clsx(
                           'relative inline-flex items-center px-4 py-2 border text-sm font-medium',
                           currentPage === index + 1
-                            ? 'z-10 bg-ocean-50 border-ocean-500 text-ocean-600'
+                            ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
                             : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                         )}
                       >
@@ -441,7 +637,7 @@ export default function AdminAssets() {
                 </div>
                 <button
                   onClick={closeViewModal}
-                  className="px-4 py-2 bg-ocean-600 text-white rounded-lg hover:bg-ocean-700"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   Close
                 </button>

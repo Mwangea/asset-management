@@ -23,4 +23,10 @@ export interface AssetFormData {
   dateAssigned?: string;
   assetImage?: File | null;
   qrCodeImage?: File | null;
+  category: string;
+  subcategory: string;
+  serialNumber: string;
+  purchaseDate: string;
+  purchasePrice: string;
+  warranty: string;
 }
