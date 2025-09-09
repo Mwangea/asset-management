@@ -10,7 +10,9 @@ const path = require('path');
 const logActivity = require('../middleware/activityLogger');
 const QRCode = require('qrcode');
 const User = require('../models/user');
-
+const csv = require('csv-parser');
+const xlsx = require('xlsx');
+const fs = require('fs');
 // Helper function to generate QR code
 async function generateQRCode(assetData) {
     const qrData = JSON.stringify({
@@ -392,5 +394,129 @@ router.post('/scan', auth, async (req, res) => {
         res.status(500).json({ msg: 'Server error', error: err.message });
     }
 });
+
+// @route   POST /api/assets/bulk-upload
+// @desc    Bulk upload assets
+// @access  Private (Admin)
+router.post('/bulk-upload', auth, roleCheck('admin'), uploadWithErrorHandling([
+    {name: 'file', maxCount: 1}
+]), async (req, res) => {
+    try {
+        if (!req.files || !req.file['file'] || req.files['file'].length === 0) {
+            return res.status(400).json({ msg: 'No file uploaded' });
+        }
+
+        const file = req.files['file'][0];
+        const fileExtension = file.originalname.split('.').pop().toLowerCase();
+        let results = [];
+        let filePath = file.path;
+
+
+        // parse the file based on its extension 
+        if(fileExtension === 'csv') {
+            // For CSV FILES
+            await new Promise((resolve, reject) => {
+                const stream = fs.createReadStream(filePath);
+                stream 
+                     .pipe(csv())
+                     .on('data', (data) => results.push(data))
+                     .on('end', resolve)
+                     .on('error',  reject);
+            });
+        } else if (['xlsx', 'xls'].includes(fileExtension)) {
+            // For Excel files
+            const workbook = xlsx.readFile(filePath);
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            results = xlsx.utils.sheet_to_json(sheet);
+        } else {
+            return res.status(400).json({ msg: 'Invalid file type. Please upload a CSV or Excel file' });
+        }
+
+        // Process the results
+        const processedData = await processBulkUpload(results);
+        
+        //clean up the temporary file
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+        res.json(processedData);
+
+    } catch (err) {
+        handleError(err, res);
+    }
+});
+
+// Helper function to process bulk upload data
+async function processBulkUpload(data) {
+    const processedCount = data.length;
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+  
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      try {
+        // Validate required fields
+        if (!row['Asset Name'] || !row['Category'] || !row['Type'] || !row['Location']) {
+          throw new Error(`Row ${i+1}: Missing required fields (Asset Name, Category, Type, Location)`);
+        }
+  
+        // Map the row to asset fields
+        const assetData = {
+          name: row['Asset Name'],
+          category: row['Category'],
+          subcategory: row['Subcategory'] || '',
+          type: row['Type'],
+          location: row['Location'],
+          status: row['Status'] || 'Available',
+          serialNumber: row['Serial Number'] || '',
+          purchaseDate: row['Purchase Date (YYYY-MM-DD)'] || '',
+          purchasePrice: row['Purchase Price'] || '',
+          warranty: row['Warranty (months)'] || '',
+          assignedTo: '', // Will be set if username is provided and found
+          assignedToName: '',
+          dateAssigned: '',
+        };
+  
+        // If assigned to a user, find the user by username
+        if (row['Assigned To (Username)']) {
+          const user = await User.findOne({ username: row['Assigned To (Username)'] });
+          if (user) {
+            assetData.assignedTo = user._id;
+            assetData.assignedToName = user.username;
+            assetData.dateAssigned = Date.now();
+            assetData.status = 'In Use';
+          } else {
+            // User not found, but we still create the asset without assignment
+            errors.push(`Row ${i+1}: User '${row['Assigned To (Username)']}' not found. Asset created without assignment.`);
+          }
+        }
+  
+        // Create the asset
+        const newAsset = new Asset(assetData);
+        const asset = await newAsset.save();
+  
+        // Generate QR code
+        const qrCodePath = await generateQRCode(asset);
+        asset.qrCodeImage = qrCodePath;
+        await asset.save();
+  
+        successCount++;
+      } catch (err) {
+        errorCount++;
+        errors.push(`Row ${i+1}: ${err.message}`);
+      }
+    }
+  
+    // Return the result
+    return {
+      success: errorCount === 0,
+      processedCount,
+      successCount,
+      errorCount,
+      errors
+    };
+  }
 
 module.exports = router;
