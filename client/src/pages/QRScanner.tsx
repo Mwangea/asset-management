@@ -35,9 +35,27 @@ const QRScanner = () => {
       if (navigator.vibrate) {
         navigator.vibrate(200);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Fetch error:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      
+      // Handle specific error cases
+      if (err.response) {
+        // Server responded with error status
+        if (err.response.status === 404) {
+          setError('Asset not found. This QR code may not be registered in the system.');
+        } else if (err.response.status >= 500) {
+          setError('Server error. Please try again later.');
+        } else {
+          setError(`Error: ${err.response.data.message || 'Failed to fetch asset details'}`);
+        }
+      } else if (err.request) {
+        // Request made but no response received
+        setError('Network error. Please check your connection and try again.');
+      } else {
+        // Other errors
+        setError(err.message || 'An error occurred while fetching asset details');
+      }
+      
       setAsset(null);
       
       // Resume scanning after error
@@ -55,27 +73,39 @@ const QRScanner = () => {
       if (scannerRef.current) {
         await stopScanning();
       }
-
+      
+      // Validate QR code format
+      if (!decodedText || decodedText.trim() === '') {
+        throw new Error('Scanned QR code is empty or invalid');
+      }
+      
       // For QR codes containing just the ID
       if (decodedText.match(/^[0-9a-fA-F]{24}$/)) {
         await fetchAsset(decodedText);
         return;
       }
-
+      
       // For QR codes containing JSON data
       try {
         const qrData = JSON.parse(decodedText);
-        if (qrData.id) {
+        if (qrData.id && qrData.id.match(/^[0-9a-fA-F]{24}$/)) {
           await fetchAsset(qrData.id);
         } else {
-          throw new Error('Invalid QR code: missing asset ID');
+          throw new Error('QR code does not contain a valid asset ID');
         }
       } catch (e) {
-        await fetchAsset(decodedText);
+        // If JSON parsing fails, check if it might be a different format
+        if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+          throw new Error('This appears to be a URL, not an asset QR code');
+        } else if (decodedText.length > 100) {
+          throw new Error('QR code contains too much data. Please scan an asset QR code');
+        } else {
+          throw new Error('Invalid QR code format. Please scan a valid asset QR code');
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error handling scan:', error);
-      setError(error instanceof Error ? error.message : 'Failed to process scan');
+      setError(error.message || 'Failed to process scan');
       startScanning(); // Restart scanning on error
     }
   };
@@ -197,11 +227,17 @@ const QRScanner = () => {
             )}
           </button>
         </div>
-
+        
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
             <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-            <p className="text-red-800">{error}</p>
+            <div>
+              <p className="text-red-800 font-medium">Scanning Error</p>
+              <p className="text-red-700">{error}</p>
+              <p className="text-red-600 text-sm mt-1">
+                Please make sure you're scanning a valid asset QR code and try again.
+              </p>
+            </div>
           </div>
         )}
         
@@ -215,7 +251,7 @@ const QRScanner = () => {
             <div id="qr-reader" className="mx-auto"></div>
           )}
         </div>
-
+        
         {/* Asset Details Modal */}
         {isModalOpen && asset && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -263,27 +299,26 @@ const QRScanner = () => {
                 )}
                 
                 <div>
-  <p className="text-sm font-medium text-gray-500">Last Updated</p>
-  <p className="text-lg">
-    {asset.lastUpdated ? new Date(asset.lastUpdated).toLocaleDateString() : 'N/A'}
-  </p>
-</div>
+                  <p className="text-sm font-medium text-gray-500">Last Updated</p>
+                  <p className="text-lg">
+                    {asset.lastUpdated ? new Date(asset.lastUpdated).toLocaleDateString() : 'N/A'}
+                  </p>
+                </div>
                 
                 {asset.assetImage && (
                   <div>
                     <p className="text-sm font-medium text-gray-500">Asset Image</p>
                     <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <img 
-                      src={getImageUrl(asset.assetImage)}
-                      alt={asset.name}
-                      className="w-full h-40 object-contain"
-                      onError={(e) => {
-                        const imgElement = e.target as HTMLImageElement;
-                        imgElement.src = '/placeholder-asset.png';
-                      }}
-                    />
+                      <img 
+                        src={getImageUrl(asset.assetImage)}
+                        alt={asset.name}
+                        className="w-full h-40 object-contain"
+                        onError={(e) => {
+                          const imgElement = e.target as HTMLImageElement;
+                          imgElement.src = '/placeholder-asset.png';
+                        }}
+                      />
                     </div>
-                    
                   </div>
                 )}
               </div>
